@@ -4,8 +4,16 @@
   "description": "Academic enterprise-simulated project implementing an internal API Gateway and distributed microservices using a Turborepo monorepo, Docker, AWS EC2, and Terraform.",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "test": "turbo run test"
   },
+  "workspaces": [
+    "app/*",
+    "services/*",
+    "services/microservices/*"
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/carlos-1200pro/uce-student-support-platform.git"
@@ -14,6 +22,7 @@
   "author": "",
   "license": "ISC",
   "type": "commonjs",
+  "packageManager": "npm@10.2.4",
   "bugs": {
     "url": "https://github.com/carlos-1200pro/uce-student-support-platform/issues"
   },
