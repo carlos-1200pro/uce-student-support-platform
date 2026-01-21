@@ -4,7 +4,7 @@
     "version":  "1.0.0",
     "scripts":  {
                     "test":  "echo no tests configured",
-                    "build":  "echo no build (python service)",
+                    "build":  "echo \"no build (python service)\"",
                     "dev":  "echo run via docker compose",
                     "lint":  "echo no lint configured"
                 }
