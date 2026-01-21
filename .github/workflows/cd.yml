@@ -2,7 +2,8 @@ name: cd
 
 on:
   push:
-    branches: ["qa", "QA"]
+
+    branches: ["QA"]
 
 permissions:
   contents: read
