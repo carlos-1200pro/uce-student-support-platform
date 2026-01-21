@@ -1,0 +1,69 @@
+name: cd
+
+on:
+  push:
+    branches: ["qa"]
+
+permissions:
+  contents: read
+
+jobs:
+  docker-build-push:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: auth-service
+            context: services/microservices/auth-service
+          - name: user-service
+            context: services/microservices/user-service
+          - name: tutoring-service
+            context: services/microservices/tutoring-service
+          - name: forum-service
+            context: services/microservices/forum-service
+          - name: payment-service
+            context: services/microservices/payment-service
+          - name: calendar-service
+            context: services/microservices/calendar-service
+          - name: academic-record-service
+            context: services/microservices/academic-record-service
+          - name: notification-service
+            context: services/microservices/notification-service
+          - name: reporting-service
+            context: services/microservices/reporting-service
+          - name: audit-service
+            context: services/microservices/audit-service
+          - name: api-gateway
+            context: services/api-gateway
+          - name: auth-frontend
+            context: app/auth-frontend
+          - name: user-frontend
+            context: app/user-frontend
+          - name: tutoring-frontend
+            context: app/tutoring-frontend
+          - name: forum-frontend
+            context: app/forum-frontend
+          - name: payment-frontend
+            context: app/payment-frontend
+          - name: calendar-frontend
+            context: app/calendar-frontend
+          - name: academic-record-frontend
+            context: app/academic-record-frontend
+          - name: admin-frontend
+            context: app/admin-frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.context }}
+          push: true
+          tags: |
+            cepatino/uce_support_platform-${{ matrix.name }}:latest
+            cepatino/uce_support_platform-${{ matrix.name }}:${{ github.sha }}
