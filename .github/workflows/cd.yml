@@ -2,7 +2,7 @@ name: cd
 
 on:
   push:
-    branches: ["qa"]
+    branches: ["qa", "QA"]
 
 permissions:
   contents: read
@@ -52,6 +52,18 @@ jobs:
             context: app/academic-record-frontend
           - name: admin-frontend
             context: app/admin-frontend
+          - name: rabbitmq
+            image: rabbitmq:3-management
+          - name: postgres
+            image: postgres:16-alpine
+          - name: mongo
+            image: mongo:7
+          - name: redis
+            image: redis:7-alpine
+          - name: kafka
+            image: confluentinc/cp-kafka:7.5.3
+          - name: zookeeper
+            image: confluentinc/cp-zookeeper:7.5.3
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -59,7 +71,8 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-      - name: Build and push
+      - name: Build and push (local context)
+        if: ${{ matrix.context != '' }}
         uses: docker/build-push-action@v5
         with:
           context: ${{ matrix.context }}
@@ -67,3 +80,11 @@ jobs:
           tags: |
             cepatino/uce_support_platform-${{ matrix.name }}:latest
             cepatino/uce_support_platform-${{ matrix.name }}:${{ github.sha }}
+      - name: Pull, tag, and push (external image)
+        if: ${{ matrix.image != '' }}
+        run: |
+          docker pull "${{ matrix.image }}"
+          docker tag "${{ matrix.image }}" "cepatino/uce_support_platform-${{ matrix.name }}:latest"
+          docker tag "${{ matrix.image }}" "cepatino/uce_support_platform-${{ matrix.name }}:${{ github.sha }}"
+          docker push "cepatino/uce_support_platform-${{ matrix.name }}:latest"
+          docker push "cepatino/uce_support_platform-${{ matrix.name }}:${{ github.sha }}"
