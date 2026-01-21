@@ -1,0 +1,335 @@
+services:
+  auth-service:
+    build: ./services/microservices/auth-service
+    env_file: ./services/microservices/auth-service/.env
+    ports:
+      - "8001:8001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      kafka:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; print(urllib.request.urlopen('http://localhost:8001/health').read())\" "]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  user-service:
+    build: ./services/microservices/user-service
+    env_file: ./services/microservices/user-service/.env
+    ports:
+      - "8002:8002"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; print(urllib.request.urlopen('http://localhost:8002/health').read())\" "]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  tutoring-service:
+    build: ./services/microservices/tutoring-service
+    env_file: ./services/microservices/tutoring-service/.env
+    ports:
+      - "8003:8003"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; print(urllib.request.urlopen('http://localhost:8003/health').read())\" "]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  forum-service:
+    build: ./services/microservices/forum-service
+    env_file: ./services/microservices/forum-service/.env
+    ports:
+      - "8004:8004"
+    depends_on:
+      mongo:
+        condition: service_started
+      kafka:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; print(urllib.request.urlopen('http://localhost:8004/health').read())\" "]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  payment-service:
+    build: ./services/microservices/payment-service
+    env_file: ./services/microservices/payment-service/.env
+    ports:
+      - "8005:8005"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; print(urllib.request.urlopen('http://localhost:8005/health').read())\" "]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  calendar-service:
+    build: ./services/microservices/calendar-service
+    env_file: ./services/microservices/calendar-service/.env
+    ports:
+      - "8006:8006"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; print(urllib.request.urlopen('http://localhost:8006/health').read())\" "]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  academic-record-service:
+    build: ./services/microservices/academic-record-service
+    env_file: ./services/microservices/academic-record-service/.env
+    ports:
+      - "8007:8007"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; print(urllib.request.urlopen('http://localhost:8007/health').read())\" "]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  notification-service:
+    build: ./services/microservices/notification-service
+    env_file: ./services/microservices/notification-service/.env
+    ports:
+      - "8008:8008"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; print(urllib.request.urlopen('http://localhost:8008/health').read())\" "]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  reporting-service:
+    build: ./services/microservices/reporting-service
+    env_file: ./services/microservices/reporting-service/.env
+    ports:
+      - "8009:8009"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; print(urllib.request.urlopen('http://localhost:8009/health').read())\" "]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  audit-service:
+    build: ./services/microservices/audit-service
+    env_file: ./services/microservices/audit-service/.env
+    ports:
+      - "8010:8010"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; print(urllib.request.urlopen('http://localhost:8010/health').read())\" "]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  api-gateway:
+    build: ./services/api-gateway
+    env_file: ./services/api-gateway/.env
+    ports:
+      - "8080:8080"
+    depends_on:
+      auth-service:
+        condition: service_healthy
+      user-service:
+        condition: service_healthy
+      tutoring-service:
+        condition: service_healthy
+      forum-service:
+        condition: service_healthy
+      payment-service:
+        condition: service_healthy
+      calendar-service:
+        condition: service_healthy
+      academic-record-service:
+        condition: service_healthy
+      notification-service:
+        condition: service_healthy
+      reporting-service:
+        condition: service_healthy
+      audit-service:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  auth-frontend:
+    build: ./app/auth-frontend
+    ports:
+      - "3001:80"
+    depends_on:
+      api-gateway:
+        condition: service_started
+
+  user-frontend:
+    build: ./app/user-frontend
+    ports:
+      - "3002:80"
+    depends_on:
+      api-gateway:
+        condition: service_started
+
+  tutoring-frontend:
+    build: ./app/tutoring-frontend
+    ports:
+      - "3003:80"
+    depends_on:
+      api-gateway:
+        condition: service_started
+
+  forum-frontend:
+    build: ./app/forum-frontend
+    ports:
+      - "3004:80"
+    depends_on:
+      api-gateway:
+        condition: service_started
+
+  payment-frontend:
+    build: ./app/payment-frontend
+    ports:
+      - "3005:80"
+    depends_on:
+      api-gateway:
+        condition: service_started
+
+  calendar-frontend:
+    build: ./app/calendar-frontend
+    ports:
+      - "3006:80"
+    depends_on:
+      api-gateway:
+        condition: service_started
+
+  academic-record-frontend:
+    build: ./app/academic-record-frontend
+    ports:
+      - "3007:80"
+    depends_on:
+      api-gateway:
+        condition: service_started
+
+  admin-frontend:
+    build: ./app/admin-frontend
+    ports:
+      - "3010:80"
+    depends_on:
+      api-gateway:
+        condition: service_started
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: carlos1212
+      POSTGRES_DB: student_platform
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d student_platform"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  mongo:
+    image: mongo:7
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.3
+    environment:
+      ZOOKEEPER_CLIENT_PORT: "2181"
+      ZOOKEEPER_TICK_TIME: "2000"
+    ports:
+      - "2181:2181"
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.3
+    depends_on:
+      zookeeper:
+        condition: service_started
+    environment:
+      KAFKA_BROKER_ID: "1"
+      KAFKA_ZOOKEEPER_CONNECT: "zookeeper:2181"
+      KAFKA_LISTENERS: "PLAINTEXT://0.0.0.0:9092"
+      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://kafka:9092"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+    ports:
+      - "9092:9092"
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
+volumes:
+  postgres_data:
+  mongo_data:

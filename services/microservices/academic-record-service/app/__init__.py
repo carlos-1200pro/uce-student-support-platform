@@ -1,0 +1,1 @@
+"""Academic record service package."""
