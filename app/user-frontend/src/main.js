@@ -1,6 +1,6 @@
 import "./style.css";
 
-const API_GATEWAY = "http://localhost:8080";
+const API_GATEWAY = window.API_BASE_URL || "http://localhost:8080";
 const app = document.getElementById("app");
 
 app.innerHTML = `
@@ -11,7 +11,7 @@ app.innerHTML = `
         <p>Gestion de perfiles vinculados al sistema académico.</p>
       </div>
       <div class="actions">
-        <a class="btn btn-outline" href="http://localhost:3001">Volver al portal</a>
+        <a class="btn btn-outline" href="/portal.html">Volver al portal</a>
         <div class="pill" id="role-pill">Rol: invitado</div>
       </div>
     </header>
@@ -21,10 +21,25 @@ app.innerHTML = `
         <h2>Crear usuario</h2>
         <form id="user-form">
           <label>Nombre completo
-            <input name="name" placeholder="Carlos Andrade" required />
+            <input name="full_name" placeholder="Carlos Andrade" required />
           </label>
           <label>Correo institucional
             <input name="email" type="email" placeholder="carlos@uce.edu.ec" required />
+          </label>
+          <label>Rol
+            <select name="role" required>
+              <option value="student">Estudiante</option>
+              <option value="professor">Profesor</option>
+            </select>
+          </label>
+          <label>Contrasena temporal
+            <input name="password" type="password" placeholder="Minimo 4 caracteres" required />
+          </label>
+          <label>Estado
+            <select name="status" required>
+              <option value="active">Activo</option>
+              <option value="blocked">Bloqueado</option>
+            </select>
           </label>
           <div class="actions">
             <button class="btn btn-primary" type="submit">Guardar</button>
@@ -98,8 +113,10 @@ const renderList = (items) => {
     .map(
       (item) => `
         <div class="list-item">
-          <strong>${item.name}</strong>
+          <strong>${item.full_name}</strong>
           <span>${item.email}</span>
+          <span>Rol: ${item.role}</span>
+          <span>Estado: ${item.status}</span>
         </div>
       `
     )
@@ -108,10 +125,53 @@ const renderList = (items) => {
     node.addEventListener("click", () => {
       const item = items[index];
       userDetail.innerHTML = `
-        <strong>${item.name}</strong>
+        <strong>${item.full_name}</strong>
         <span>${item.email}</span>
+        <span>Rol: ${item.role}</span>
+        <span>Estado: ${item.status}</span>
         <span>ID: ${item.id}</span>
+        <div class="divider"></div>
+        <label>Rol
+          <select id="edit-role">
+            <option value="student" ${item.role === "student" ? "selected" : ""}>Estudiante</option>
+            <option value="professor" ${item.role === "professor" ? "selected" : ""}>Profesor</option>
+            <option value="admin" ${item.role === "admin" ? "selected" : ""}>Admin</option>
+          </select>
+        </label>
+        <label>Estado
+          <select id="edit-status">
+            <option value="active" ${item.status === "active" ? "selected" : ""}>Activo</option>
+            <option value="blocked" ${item.status === "blocked" ? "selected" : ""}>Bloqueado</option>
+          </select>
+        </label>
+        <div class="actions">
+          <button class="btn btn-primary" id="btn-update-user">Actualizar</button>
+          <button class="btn btn-outline" id="btn-delete-user">Eliminar</button>
+        </div>
       `;
+      document.getElementById("btn-update-user").addEventListener("click", async () => {
+        try {
+          const payload = {
+            role: document.getElementById("edit-role").value,
+            status: document.getElementById("edit-status").value,
+          };
+          await request("PUT", `/users/api/users/${item.id}`, payload);
+          setStatus("Usuario actualizado.");
+          document.getElementById("btn-refresh").click();
+        } catch (error) {
+          setStatus(error.message, true);
+        }
+      });
+      document.getElementById("btn-delete-user").addEventListener("click", async () => {
+        try {
+          await request("DELETE", `/users/api/users/${item.id}`);
+          setStatus("Usuario eliminado.");
+          userDetail.innerHTML = "Selecciona un usuario.";
+          document.getElementById("btn-refresh").click();
+        } catch (error) {
+          setStatus(error.message, true);
+        }
+      });
     });
   });
 };
@@ -143,6 +203,8 @@ document.getElementById("user-form").addEventListener("submit", async (event) =>
 
 if (!token) {
   setStatus("Inicia sesion en Auth para obtener token.", true);
+} else if (role !== "admin") {
+  setStatus("Acceso restringido. Solo admins pueden gestionar usuarios.", true);
 } else {
   document.getElementById("btn-refresh").click();
 }
