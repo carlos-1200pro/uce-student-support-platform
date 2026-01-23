@@ -11,6 +11,9 @@ from app.service import forum_service
 load_dotenv()
 
 SERVICE_NAME = os.getenv("SERVICE_NAME", "forum-service")
+BASE_PATH = os.getenv("BASE_PATH", "").rstrip("/")
+if BASE_PATH and not BASE_PATH.startswith("/"):
+    BASE_PATH = f"/{BASE_PATH}"
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s - %(message)s")
 
@@ -35,7 +38,7 @@ def on_shutdown() -> None:
     forum_service.shutdown()
 
 
-@app.get("/health", response_model=ApiResponse[HealthData], summary="Health check")
+@app.get(f"{BASE_PATH}/health" if BASE_PATH else "/health", response_model=ApiResponse[HealthData], summary="Health check")
 def health():
     return ApiResponse(
         success=True,
@@ -44,4 +47,4 @@ def health():
     )
 
 
-app.include_router(router, prefix="/api", tags=["forum"])
+app.include_router(router, prefix=f"{BASE_PATH}/api" if BASE_PATH else "/api", tags=["forum"])
