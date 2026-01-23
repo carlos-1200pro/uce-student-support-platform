@@ -1,0 +1,45 @@
+services:
+  ${service_a_name}:
+    image: ${service_a_image}
+    environment:
+      PORT: "${service_a_port}"
+      DATABASE_URL: "postgresql://${db_user}:${db_password}@${db_host}:5432/${db_name}"
+      DB_HOST: "${db_host}"
+      DB_NAME: "${db_name}"
+      DB_USER: "${db_user}"
+      DB_PASSWORD: "${db_password}"
+      REDIS_URL: "redis://${redis_host}:6379/0"
+      REDIS_HOST: "${redis_host}"
+      MONGO_URI: "mongodb://${mongo_host}:27017"
+      MONGO_HOST: "${mongo_host}"
+      KAFKA_BROKERS: "${kafka_bootstrap}"
+      KAFKA_BOOTSTRAP_SERVERS: "${kafka_bootstrap}"
+      RABBIT_URL: "amqp://guest:guest@${rabbitmq_host}:5672/"
+      RABBITMQ_HOST: "${rabbitmq_host}"
+      JWT_SECRET: "${jwt_secret}"
+      BASE_PATH: "${service_a_base_path}"
+    ports:
+      - "${service_a_port}:${service_a_port}"
+    restart: unless-stopped
+  ${service_b_name}:
+    image: ${service_b_image}
+    environment:
+      PORT: "${service_b_port}"
+      DATABASE_URL: "postgresql://${db_user}:${db_password}@${db_host}:5432/${db_name}"
+      DB_HOST: "${db_host}"
+      DB_NAME: "${db_name}"
+      DB_USER: "${db_user}"
+      DB_PASSWORD: "${db_password}"
+      REDIS_URL: "redis://${redis_host}:6379/0"
+      REDIS_HOST: "${redis_host}"
+      MONGO_URI: "mongodb://${mongo_host}:27017"
+      MONGO_HOST: "${mongo_host}"
+      KAFKA_BROKERS: "${kafka_bootstrap}"
+      KAFKA_BOOTSTRAP_SERVERS: "${kafka_bootstrap}"
+      RABBIT_URL: "amqp://guest:guest@${rabbitmq_host}:5672/"
+      RABBITMQ_HOST: "${rabbitmq_host}"
+      JWT_SECRET: "${jwt_secret}"
+      BASE_PATH: "${service_b_base_path}"
+    ports:
+      - "${service_b_port}:${service_b_port}"
+    restart: unless-stopped

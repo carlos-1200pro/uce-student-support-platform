@@ -1,0 +1,36 @@
+#!/bin/bash
+set -euxo pipefail
+exec > >(tee /var/log/user-data.log | logger -t user-data -s 2>/dev/console) 2>&1
+
+echo "user-data: start $(date -Is)"
+echo "user-data: version 2026-01-22-3"
+
+retry() {
+  local n=0
+  until "$@"; do
+    n=$((n+1))
+    if [ "$n" -ge 10 ]; then
+      echo "retry: failed after $${n} attempts: $*"
+      return 1
+    fi
+    sleep 10
+  done
+}
+
+retry curl -4 -m 5 -s http://1.1.1.1 >/dev/null
+retry apt-get -o Acquire::ForceIPv4=true update -y
+retry apt-get -o Acquire::ForceIPv4=true install -y docker.io docker-compose
+systemctl enable docker
+systemctl start docker
+
+mkdir -p /opt/messaging
+cat > /opt/messaging/docker-compose.yml <<'EOF'
+${compose}
+EOF
+
+HOST_IP="$(curl -s http://169.254.169.254/latest/meta-data/local-ipv4 || hostname -I | awk '{print $1}')"
+sed -i "s/__HOST_IP__/$${HOST_IP}/g" /opt/messaging/docker-compose.yml
+
+cd /opt/messaging
+retry docker-compose pull
+docker-compose up -d

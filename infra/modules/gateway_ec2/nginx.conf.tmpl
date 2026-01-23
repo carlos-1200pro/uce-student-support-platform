@@ -1,0 +1,56 @@
+server {
+  listen 80;
+  server_name _;
+
+  location /health {
+    default_type application/json;
+    add_header Access-Control-Allow-Origin "$http_origin" always;
+    add_header Access-Control-Allow-Credentials "true" always;
+    add_header Access-Control-Allow-Headers "authorization,content-type" always;
+    add_header Access-Control-Allow-Methods "GET,OPTIONS" always;
+    if ($request_method = OPTIONS) {
+      return 204;
+    }
+    return 200 '{"status":"ok","service":"api-gateway"}';
+  }
+
+  location /auth/ {
+    proxy_pass http://${upstream_host}/auth/;
+  }
+
+  location /forum/ {
+    proxy_pass http://${upstream_host}/forum/;
+  }
+
+  location /tutoring/ {
+    proxy_pass http://${upstream_host}/tutoring/;
+  }
+
+  location /payments/ {
+    proxy_pass http://${upstream_host}/payments/;
+  }
+
+  location /calendar/ {
+    proxy_pass http://${upstream_host}/calendar/;
+  }
+
+  location /users/ {
+    proxy_pass http://${upstream_host}/users/;
+  }
+
+  location /records/ {
+    proxy_pass http://${upstream_host}/records/;
+  }
+
+  location /notifications/ {
+    proxy_pass http://${upstream_host}/notifications/;
+  }
+
+  location /reporting/ {
+    proxy_pass http://${upstream_host}/reporting/;
+  }
+
+  location /audit/ {
+    proxy_pass http://${upstream_host}/audit/;
+  }
+}

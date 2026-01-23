@@ -1,0 +1,15 @@
+services:
+  ${frontend_a_name}:
+    image: ${frontend_a_image}
+    environment:
+      API_BASE_URL: "${gateway_url}"
+    ports:
+      - "${frontend_a_port}:80"
+    restart: unless-stopped
+  ${frontend_b_name}:
+    image: ${frontend_b_image}
+    environment:
+      API_BASE_URL: "${gateway_url}"
+    ports:
+      - "${frontend_b_port}:80"
+    restart: unless-stopped
