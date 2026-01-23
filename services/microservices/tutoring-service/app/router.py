@@ -67,8 +67,15 @@ def require_role(required_role: str, authorization: str) -> dict:
     response_model=ApiResponse[list[TutoringRead]],
     summary="List tutoring sessions",
 )
-def list_sessions():
-    return ApiResponse(success=True, data=tutoring_service.list_sessions(), message="ok")
+def list_sessions(authorization: str = Header(default="")):
+    payload = require_auth(authorization)
+    role = payload.get("role")
+    email = payload.get("email")
+    if role == "professor":
+        sessions = tutoring_service.list_sessions(teacher_email=email)
+    else:
+        sessions = tutoring_service.list_sessions()
+    return ApiResponse(success=True, data=sessions, message="ok")
 
 
 @router.post(
@@ -78,8 +85,8 @@ def list_sessions():
     summary="Create tutoring session",
 )
 def create_session(payload: TutoringCreate, authorization: str = Header(default="")):
-    require_role("professor", authorization)
-    data = tutoring_service.create_session(payload)
+    auth_payload = require_role("professor", authorization)
+    data = tutoring_service.create_session(payload, auth_payload.get("email", ""))
     return ApiResponse(success=True, data=data, message="created")
 
 
@@ -140,6 +147,8 @@ def list_tickets(authorization: str = Header(default="")):
     email = payload.get("email")
     if role == "student":
         tickets = tutoring_service.list_tickets(student_email=email)
+    elif role == "professor":
+        tickets = tutoring_service.list_tickets(teacher_email=email)
     else:
         tickets = tutoring_service.list_tickets()
     return ApiResponse(success=True, data=tickets, message="ok")

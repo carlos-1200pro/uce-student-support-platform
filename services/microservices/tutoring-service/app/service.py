@@ -27,6 +27,7 @@ class TutoringUpdate(BaseModel):
 class TutoringRead(BaseModel):
     id: int
     teacher: str
+    teacher_email: str
     student: str
     date: str
 
@@ -35,6 +36,7 @@ class TicketRead(BaseModel):
     id: int
     session_id: int
     teacher: str
+    teacher_email: str
     student: str
     date: str
     issued_at: str
@@ -78,28 +80,40 @@ class TutoringService:
         if self._db_conn and not self._db_conn.closed:
             self._db_conn.close()
 
-    def list_sessions(self) -> list[TutoringRead]:
+    def list_sessions(self, teacher_email: Optional[str] = None) -> list[TutoringRead]:
         self._ensure_ready()
         with self._db_conn.cursor() as cur:
-            cur.execute("SELECT id, teacher, student, date FROM tutoring_sessions ORDER BY id ASC")
+            if teacher_email:
+                cur.execute(
+                    "SELECT id, teacher, teacher_email, student, date FROM tutoring_sessions WHERE teacher_email = %s ORDER BY id ASC",
+                    (teacher_email,),
+                )
+            else:
+                cur.execute("SELECT id, teacher, teacher_email, student, date FROM tutoring_sessions ORDER BY id ASC")
             rows = cur.fetchall()
-        return [TutoringRead(id=row[0], teacher=row[1], student=row[2], date=row[3]) for row in rows]
+        return [TutoringRead(id=row[0], teacher=row[1], teacher_email=row[2], student=row[3], date=row[4]) for row in rows]
 
-    def create_session(self, payload: TutoringCreate) -> TutoringRead:
+    def create_session(self, payload: TutoringCreate, teacher_email: str) -> TutoringRead:
         self._ensure_ready()
-        self._publish_command("tutoring.create_session", payload.model_dump())
+        self._publish_command("tutoring.create_session", {**payload.model_dump(), "teacher_email": teacher_email})
         student = "DISPONIBLE"
         with self._db_conn.cursor() as cur:
             cur.execute(
                 """
-                INSERT INTO tutoring_sessions (teacher, student, date)
-                VALUES (%s, %s, %s)
+                INSERT INTO tutoring_sessions (teacher, teacher_email, student, date)
+                VALUES (%s, %s, %s, %s)
                 RETURNING id
                 """,
-                (payload.teacher, student, payload.date),
+                (payload.teacher, teacher_email, student, payload.date),
             )
             session_id = cur.fetchone()[0]
-        session = TutoringRead(id=session_id, teacher=payload.teacher, student=student, date=payload.date)
+        session = TutoringRead(
+            id=session_id,
+            teacher=payload.teacher,
+            teacher_email=teacher_email,
+            student=student,
+            date=payload.date,
+        )
         self._emit_event("tutoring.created", session.model_dump())
         return session
 
@@ -107,13 +121,13 @@ class TutoringService:
         self._ensure_ready()
         with self._db_conn.cursor() as cur:
             cur.execute(
-                "SELECT id, teacher, student, date FROM tutoring_sessions WHERE id = %s",
+                "SELECT id, teacher, teacher_email, student, date FROM tutoring_sessions WHERE id = %s",
                 (session_id,),
             )
             row = cur.fetchone()
         if not row:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="session not found")
-        return TutoringRead(id=row[0], teacher=row[1], student=row[2], date=row[3])
+        return TutoringRead(id=row[0], teacher=row[1], teacher_email=row[2], student=row[3], date=row[4])
 
     def update_session(self, session_id: int, payload: TutoringUpdate) -> TutoringRead:
         self._ensure_ready()
@@ -126,13 +140,13 @@ class TutoringService:
         values.append(session_id)
         with self._db_conn.cursor() as cur:
             cur.execute(
-                f"UPDATE tutoring_sessions SET {columns} WHERE id = %s RETURNING id, teacher, student, date",
+                f"UPDATE tutoring_sessions SET {columns} WHERE id = %s RETURNING id, teacher, teacher_email, student, date",
                 values,
             )
             row = cur.fetchone()
         if not row:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="session not found")
-        session = TutoringRead(id=row[0], teacher=row[1], student=row[2], date=row[3])
+        session = TutoringRead(id=row[0], teacher=row[1], teacher_email=row[2], student=row[3], date=row[4])
         self._emit_event("tutoring.updated", session.model_dump())
         return session
 
@@ -141,13 +155,13 @@ class TutoringService:
         self._publish_command("tutoring.reserve_session", {"session_id": session_id, "student": student})
         with self._db_conn.cursor() as cur:
             cur.execute(
-                "SELECT teacher, student, date FROM tutoring_sessions WHERE id = %s",
+                "SELECT teacher, teacher_email, student, date FROM tutoring_sessions WHERE id = %s",
                 (session_id,),
             )
             row = cur.fetchone()
         if not row:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="session not found")
-        if row[1].upper() != "DISPONIBLE":
+        if row[2].upper() != "DISPONIBLE":
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="session already reserved")
         with self._db_conn.cursor() as cur:
             cur.execute(
@@ -155,21 +169,27 @@ class TutoringService:
                 UPDATE tutoring_sessions
                 SET student = %s
                 WHERE id = %s
-                RETURNING id, teacher, student, date
+                RETURNING id, teacher, teacher_email, student, date
                 """,
                 (student, session_id),
             )
             updated = cur.fetchone()
         if not updated:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="session not found")
-        session = TutoringRead(id=updated[0], teacher=updated[1], student=updated[2], date=updated[3])
+        session = TutoringRead(
+            id=updated[0],
+            teacher=updated[1],
+            teacher_email=updated[2],
+            student=updated[3],
+            date=updated[4],
+        )
         with self._db_conn.cursor() as cur:
             cur.execute(
                 """
-                INSERT INTO tutoring_tickets (session_id, teacher, student, date)
-                VALUES (%s, %s, %s, %s)
+                INSERT INTO tutoring_tickets (session_id, teacher, teacher_email, student, date)
+                VALUES (%s, %s, %s, %s, %s)
                 """,
-                (session.id, session.teacher, session.student, session.date),
+                (session.id, session.teacher, session.teacher_email, session.student, session.date),
             )
         self._emit_event("tutoring.ticket_issued", session.model_dump())
         self._emit_event("tutoring.reserved", session.model_dump())
@@ -185,22 +205,34 @@ class TutoringService:
             self._emit_event("tutoring.deleted", {"id": session_id})
         return deleted
 
-    def list_tickets(self, student_email: Optional[str] = None) -> list[TicketRead]:
+    def list_tickets(
+        self, student_email: Optional[str] = None, teacher_email: Optional[str] = None
+    ) -> list[TicketRead]:
         self._ensure_ready()
         with self._db_conn.cursor() as cur:
             if student_email:
                 cur.execute(
                     """
-                    SELECT id, session_id, teacher, student, date, issued_at
+                    SELECT id, session_id, teacher, teacher_email, student, date, issued_at
                     FROM tutoring_tickets
                     WHERE student = %s
                     ORDER BY id DESC
                     """,
                     (student_email,),
                 )
+            elif teacher_email:
+                cur.execute(
+                    """
+                    SELECT id, session_id, teacher, teacher_email, student, date, issued_at
+                    FROM tutoring_tickets
+                    WHERE teacher_email = %s
+                    ORDER BY id DESC
+                    """,
+                    (teacher_email,),
+                )
             else:
                 cur.execute(
-                    "SELECT id, session_id, teacher, student, date, issued_at FROM tutoring_tickets ORDER BY id DESC"
+                    "SELECT id, session_id, teacher, teacher_email, student, date, issued_at FROM tutoring_tickets ORDER BY id DESC"
                 )
             rows = cur.fetchall()
         return [
@@ -208,9 +240,10 @@ class TutoringService:
                 id=row[0],
                 session_id=row[1],
                 teacher=row[2],
-                student=row[3],
-                date=row[4],
-                issued_at=str(row[5]),
+                teacher_email=row[3],
+                student=row[4],
+                date=row[5],
+                issued_at=str(row[6]),
             )
             for row in rows
         ]
@@ -219,7 +252,7 @@ class TutoringService:
         self._ensure_ready()
         with self._db_conn.cursor() as cur:
             cur.execute(
-                "SELECT id, session_id, teacher, student, date, issued_at FROM tutoring_tickets WHERE id = %s",
+                "SELECT id, session_id, teacher, teacher_email, student, date, issued_at FROM tutoring_tickets WHERE id = %s",
                 (ticket_id,),
             )
             row = cur.fetchone()
@@ -229,9 +262,10 @@ class TutoringService:
             id=row[0],
             session_id=row[1],
             teacher=row[2],
-            student=row[3],
-            date=row[4],
-            issued_at=str(row[5]),
+            teacher_email=row[3],
+            student=row[4],
+            date=row[5],
+            issued_at=str(row[6]),
         )
 
     def _ensure_ready(self) -> None:
@@ -247,6 +281,7 @@ class TutoringService:
                     CREATE TABLE IF NOT EXISTS tutoring_sessions (
                         id SERIAL PRIMARY KEY,
                         teacher TEXT NOT NULL,
+                        teacher_email TEXT NOT NULL,
                         student TEXT NOT NULL,
                         date TEXT NOT NULL,
                         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -255,14 +290,27 @@ class TutoringService:
                 )
                 cur.execute(
                     """
+                    ALTER TABLE tutoring_sessions
+                    ADD COLUMN IF NOT EXISTS teacher_email TEXT NOT NULL DEFAULT ''
+                    """
+                )
+                cur.execute(
+                    """
                     CREATE TABLE IF NOT EXISTS tutoring_tickets (
                         id SERIAL PRIMARY KEY,
                         session_id INT NOT NULL,
                         teacher TEXT NOT NULL,
+                        teacher_email TEXT NOT NULL,
                         student TEXT NOT NULL,
                         date TEXT NOT NULL,
                         issued_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
                     )
+                    """
+                )
+                cur.execute(
+                    """
+                    ALTER TABLE tutoring_tickets
+                    ADD COLUMN IF NOT EXISTS teacher_email TEXT NOT NULL DEFAULT ''
                     """
                 )
         except Exception as exc:
