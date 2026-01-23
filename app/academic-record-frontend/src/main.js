@@ -1,6 +1,6 @@
 import "./style.css";
 
-const API_GATEWAY = "http://localhost:8080";
+const API_GATEWAY = window.API_BASE_URL || "http://localhost:8080";
 const app = document.getElementById("app");
 
 app.innerHTML = `
@@ -11,7 +11,7 @@ app.innerHTML = `
         <p>Registro de cursos y calificaciones.</p>
       </div>
       <div class="actions">
-        <a class="btn btn-outline" href="http://localhost:3001">Volver al portal</a>
+        <a class="btn btn-outline" href="/portal.html">Volver al portal</a>
         <div class="pill" id="role-pill">Rol: invitado</div>
       </div>
     </header>
@@ -42,6 +42,7 @@ const rolePill = document.getElementById("role-pill");
 const recordList = document.getElementById("record-list");
 const recordDetail = document.getElementById("record-detail");
 const recordPanel = document.getElementById("record-panel");
+let studentOptions = [];
 
 const params = new URLSearchParams(window.location.search);
 if (params.get("token")) {
@@ -131,7 +132,7 @@ const renderList = (items) => {
             return;
           }
           try {
-            await request("PUT", `/academic-record/api/records/${item.id}`, { course, grade });
+            await request("PUT", `/records/api/records/${item.id}`, { course, grade });
             setStatus("Registro actualizado.");
             document.getElementById("btn-refresh").click();
           } catch (error) {
@@ -143,7 +144,7 @@ const renderList = (items) => {
       if (deleteButton) {
         deleteButton.addEventListener("click", async () => {
           try {
-            await request("DELETE", `/academic-record/api/records/${item.id}`);
+            await request("DELETE", `/records/api/records/${item.id}`);
             setStatus("Registro eliminado.");
             recordDetail.innerHTML = "Selecciona un registro.";
             document.getElementById("btn-refresh").click();
@@ -158,7 +159,7 @@ const renderList = (items) => {
 
 document.getElementById("btn-refresh").addEventListener("click", async () => {
   try {
-    const data = await request("GET", "/academic-record/api/records");
+    const data = await request("GET", "/records/api/records");
     renderList(data.data || []);
     setStatus("Registros actualizados.");
   } catch (error) {
@@ -177,7 +178,7 @@ const renderRecordPanel = () => {
     `;
     document.getElementById("btn-refresh-view").addEventListener("click", async () => {
       try {
-        const data = await request("GET", "/academic-record/api/records");
+        const data = await request("GET", "/records/api/records");
         renderList(data.data || []);
         setStatus("Registros actualizados.");
       } catch (error) {
@@ -190,8 +191,8 @@ const renderRecordPanel = () => {
   recordPanel.innerHTML = `
     <h2>Nuevo registro</h2>
     <form id="record-form">
-      <label>Correo estudiante
-        <input name="student_email" type="email" placeholder="estudiante@uce.edu.ec" required />
+      <label>Estudiante
+        <select name="student_email" id="student-select" required></select>
       </label>
       <label>Curso
         <input name="course" placeholder="Programacion distribuida" required />
@@ -204,15 +205,26 @@ const renderRecordPanel = () => {
       </div>
     </form>
   `;
+  const studentSelect = document.getElementById("student-select");
+  if (!studentOptions.length) {
+    studentSelect.innerHTML = "<option value=''>Sin estudiantes registrados</option>";
+  } else {
+    studentSelect.innerHTML = `
+      <option value="">Selecciona un estudiante</option>
+      ${studentOptions
+        .map((student) => `<option value="${student.email}">${student.full_name} (${student.email})</option>`)
+        .join("")}
+    `;
+  }
   document.getElementById("record-form").addEventListener("submit", async (event) => {
     event.preventDefault();
     const payload = Object.fromEntries(new FormData(event.target).entries());
     payload.grade = Number(payload.grade);
     try {
-      await request("POST", "/academic-record/api/records", payload);
+      await request("POST", "/records/api/records", payload);
       setStatus("Registro creado.");
       event.target.reset();
-      const data = await request("GET", "/academic-record/api/records");
+      const data = await request("GET", "/records/api/records");
       renderList(data.data || []);
     } catch (error) {
       setStatus(error.message, true);
@@ -223,6 +235,19 @@ const renderRecordPanel = () => {
 if (!token) {
   setStatus("Inicia sesion en Auth para registrar calificaciones.", true);
 } else {
-  renderRecordPanel();
-  document.getElementById("btn-refresh").click();
+  if (role === "professor") {
+    request("GET", "/users/api/users/students")
+      .then((data) => {
+        studentOptions = data.data || [];
+        renderRecordPanel();
+        document.getElementById("btn-refresh").click();
+      })
+      .catch((error) => {
+        setStatus(error.message, true);
+        renderRecordPanel();
+      });
+  } else {
+    renderRecordPanel();
+    document.getElementById("btn-refresh").click();
+  }
 }
