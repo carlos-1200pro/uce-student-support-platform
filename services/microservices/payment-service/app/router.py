@@ -71,6 +71,13 @@ def require_role(required_role: str, authorization: str) -> dict:
     return payload
 
 
+def require_any_role(roles: list[str], authorization: str) -> dict:
+    payload = require_auth(authorization)
+    if payload.get("role") not in roles:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="insufficient role")
+    return payload
+
+
 @router.get(
     "/payments",
     response_model=ApiResponse[list[PaymentRead]],
@@ -80,7 +87,7 @@ def list_payments(authorization: str = Header(default="")):
     payload = require_auth(authorization)
     role = payload.get("role")
     email = payload.get("email")
-    if role == "student":
+    if role in ("student", "professor"):
         payments = payment_service.list_payments(student_email=email)
     else:
         payments = payment_service.list_payments()
@@ -103,7 +110,7 @@ def list_fees():
     summary="Create fee catalog entry",
 )
 def create_fee(payload: FeeCreate, authorization: str = Header(default="")):
-    require_role("professor", authorization)
+    require_role("admin", authorization)
     data = payment_service.create_fee(payload)
     return ApiResponse(success=True, data=data, message="created")
 
@@ -114,7 +121,7 @@ def create_fee(payload: FeeCreate, authorization: str = Header(default="")):
     summary="Update fee catalog entry",
 )
 def update_fee(fee_id: int, payload: FeeUpdate, authorization: str = Header(default="")):
-    require_role("professor", authorization)
+    require_role("admin", authorization)
     data = payment_service.update_fee(fee_id, payload)
     return ApiResponse(success=True, data=data, message="updated")
 
@@ -125,7 +132,7 @@ def update_fee(fee_id: int, payload: FeeUpdate, authorization: str = Header(defa
     summary="Delete fee catalog entry",
 )
 def delete_fee(fee_id: int, authorization: str = Header(default="")):
-    require_role("professor", authorization)
+    require_role("admin", authorization)
     deleted = payment_service.delete_fee(fee_id)
     return ApiResponse(success=True, data=DeleteData(deleted=deleted, id=fee_id), message="deleted")
 
@@ -137,7 +144,7 @@ def delete_fee(fee_id: int, authorization: str = Header(default="")):
     summary="Create payment order from courses",
 )
 def create_order(payload: OrderCreate, authorization: str = Header(default="")):
-    auth_payload = require_role("student", authorization)
+    auth_payload = require_any_role(["student", "professor"], authorization)
     data = payment_service.create_order(payload, auth_payload.get("email", "student"))
     return ApiResponse(success=True, data=data, message="created")
 
@@ -148,7 +155,7 @@ def create_order(payload: OrderCreate, authorization: str = Header(default="")):
     summary="Pay a pending payment",
 )
 def pay(payment_id: int, payload: PayRequest, authorization: str = Header(default="")):
-    auth_payload = require_role("student", authorization)
+    auth_payload = require_any_role(["student", "professor"], authorization)
     data = payment_service.pay_payment(payment_id, payload, auth_payload.get("email"))
     return ApiResponse(success=True, data=data, message="paid")
 
@@ -187,7 +194,7 @@ def update_payment(payment_id: int, payload: PaymentUpdate, authorization: str =
     auth_payload = require_auth(authorization)
     role = auth_payload.get("role")
     email = auth_payload.get("email")
-    if role == "student":
+    if role in ("student", "professor"):
         payment = payment_service.get_payment(payment_id)
         if payment.student_email != email:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="insufficient role")
@@ -200,7 +207,7 @@ def update_payment(payment_id: int, payload: PaymentUpdate, authorization: str =
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid status")
         payload = PaymentUpdate(amount=updates.get("amount"), status=updates.get("status"))
     else:
-        require_role("professor", authorization)
+        require_role("admin", authorization)
     data = payment_service.update_payment(payment_id, payload)
     return ApiResponse(success=True, data=data, message="updated")
 
@@ -214,14 +221,14 @@ def delete_payment(payment_id: int, authorization: str = Header(default="")):
     auth_payload = require_auth(authorization)
     role = auth_payload.get("role")
     email = auth_payload.get("email")
-    if role == "student":
+    if role in ("student", "professor"):
         payment = payment_service.get_payment(payment_id)
         if payment.student_email != email:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="insufficient role")
         if payment.status == "PAID":
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="payment already paid")
     else:
-        require_role("professor", authorization)
+        require_role("admin", authorization)
     deleted = payment_service.delete_payment(payment_id)
     return ApiResponse(success=True, data=DeleteData(deleted=deleted, id=payment_id), message="deleted")
 
