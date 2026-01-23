@@ -1,6 +1,9 @@
 from typing import Generic, Optional, TypeVar
 
-from fastapi import APIRouter, status
+import os
+
+import jwt
+from fastapi import APIRouter, Header, HTTPException, status
 from pydantic import BaseModel
 
 from app.service import AuditLogCreate, AuditLogRead, AuditLogUpdate, audit_service
@@ -32,12 +35,35 @@ class DeleteData(BaseModel):
     id: int
 
 
+JWT_SECRET = os.getenv("JWT_SECRET", "change-me")
+JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
+
+
+def require_auth(authorization: str) -> dict:
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="missing token")
+    token = authorization.split(" ", 1)[1].strip()
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+    except jwt.PyJWTError as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid token") from exc
+    return payload
+
+
+def require_role(required_role: str, authorization: str) -> dict:
+    payload = require_auth(authorization)
+    if payload.get("role") != required_role:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="insufficient role")
+    return payload
+
+
 @router.get(
     "/audits",
     response_model=ApiResponse[list[AuditLogRead]],
     summary="List audit logs",
 )
-def list_logs():
+def list_logs(authorization: str = Header(default="")):
+    require_role("admin", authorization)
     return ApiResponse(success=True, data=audit_service.list_logs(), message="ok")
 
 
@@ -47,7 +73,8 @@ def list_logs():
     status_code=status.HTTP_201_CREATED,
     summary="Create audit log",
 )
-def create_log(payload: AuditLogCreate):
+def create_log(payload: AuditLogCreate, authorization: str = Header(default="")):
+    require_role("admin", authorization)
     data = audit_service.create_log(payload)
     return ApiResponse(success=True, data=data, message="created")
 
@@ -57,7 +84,8 @@ def create_log(payload: AuditLogCreate):
     response_model=ApiResponse[AuditLogRead],
     summary="Get audit log",
 )
-def get_log(log_id: int):
+def get_log(log_id: int, authorization: str = Header(default="")):
+    require_role("admin", authorization)
     data = audit_service.get_log(log_id)
     return ApiResponse(success=True, data=data, message="ok")
 
@@ -67,7 +95,8 @@ def get_log(log_id: int):
     response_model=ApiResponse[AuditLogRead],
     summary="Update audit log",
 )
-def update_log(log_id: int, payload: AuditLogUpdate):
+def update_log(log_id: int, payload: AuditLogUpdate, authorization: str = Header(default="")):
+    require_role("admin", authorization)
     data = audit_service.update_log(log_id, payload)
     return ApiResponse(success=True, data=data, message="updated")
 
@@ -77,7 +106,8 @@ def update_log(log_id: int, payload: AuditLogUpdate):
     response_model=ApiResponse[DeleteData],
     summary="Delete audit log",
 )
-def delete_log(log_id: int):
+def delete_log(log_id: int, authorization: str = Header(default="")):
+    require_role("admin", authorization)
     deleted = audit_service.delete_log(log_id)
     return ApiResponse(success=True, data=DeleteData(deleted=deleted, id=log_id), message="deleted")
 
