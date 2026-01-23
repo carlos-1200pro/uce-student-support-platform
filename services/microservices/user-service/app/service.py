@@ -15,24 +15,32 @@ logger = logging.getLogger("user-service")
 
 
 class UserCreate(BaseModel):
-    name: str = Field(min_length=2, max_length=120)
+    full_name: str = Field(min_length=2, max_length=120)
     email: EmailStr
+    role: str = Field(default="student", min_length=3, max_length=20)
+    password: str = Field(min_length=4, max_length=120)
+    status: str = Field(default="active", min_length=3, max_length=20)
 
 
 class UserUpdate(BaseModel):
-    name: Optional[str] = Field(default=None, min_length=2, max_length=120)
+    full_name: Optional[str] = Field(default=None, min_length=2, max_length=120)
     email: Optional[EmailStr] = None
+    role: Optional[str] = Field(default=None, min_length=3, max_length=20)
+    status: Optional[str] = Field(default=None, min_length=3, max_length=20)
 
 
 class UserRead(BaseModel):
     id: int
-    name: str
+    full_name: str
     email: EmailStr
+    role: str
+    status: str
 
 
 @dataclass
 class UserService:
     database_url: str = os.getenv("DATABASE_URL", "postgresql://auth_user:auth_pass@postgres:5432/auth_db")
+    password_salt: str = os.getenv("PASSWORD_SALT", "change-me")
     kafka_brokers: str = os.getenv("KAFKA_BROKERS", "kafka:9092")
     kafka_topic_events: str = os.getenv("KAFKA_TOPIC_USER_EVENTS", "user-events")
     kafka_topic_commands: str = os.getenv("KAFKA_TOPIC_USER_COMMANDS", "user-commands")
@@ -69,41 +77,56 @@ class UserService:
         if self._db_conn and not self._db_conn.closed:
             self._db_conn.close()
 
-    def list_users(self) -> list[UserRead]:
+    def list_users(self, role_filter: Optional[str] = None) -> list[UserRead]:
         self._ensure_ready()
         with self._db_conn.cursor() as cur:
-            cur.execute("SELECT id, name, email FROM user_profiles ORDER BY id ASC")
+            if role_filter:
+                cur.execute(
+                    "SELECT id, full_name, email, role, status FROM users WHERE role = %s ORDER BY id ASC",
+                    (role_filter,),
+                )
+            else:
+                cur.execute("SELECT id, full_name, email, role, status FROM users ORDER BY id ASC")
             rows = cur.fetchall()
-        return [UserRead(id=row[0], name=row[1], email=row[2]) for row in rows]
+        return [UserRead(id=row[0], full_name=row[1], email=row[2], role=row[3], status=row[4]) for row in rows]
 
     def create_user(self, payload: UserCreate) -> UserRead:
         self._ensure_ready()
+        if payload.role == "admin":
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="admin role not allowed")
         self._publish_command("user.create_user", payload.model_dump())
         with self._db_conn.cursor() as cur:
-            cur.execute("SELECT id FROM user_profiles WHERE email = %s", (payload.email,))
+            cur.execute("SELECT id FROM users WHERE email = %s", (payload.email,))
             if cur.fetchone():
                 raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="email already exists")
+            password_hash = self._hash_password(payload.password)
             cur.execute(
                 """
-                INSERT INTO user_profiles (name, email)
-                VALUES (%s, %s)
+                INSERT INTO users (full_name, email, role, status, password_hash)
+                VALUES (%s, %s, %s, %s, %s)
                 RETURNING id
                 """,
-                (payload.name, payload.email),
+                (payload.full_name, payload.email, payload.role, payload.status, password_hash),
             )
             user_id = cur.fetchone()[0]
-        user = UserRead(id=user_id, name=payload.name, email=payload.email)
+        user = UserRead(
+            id=user_id,
+            full_name=payload.full_name,
+            email=payload.email,
+            role=payload.role,
+            status=payload.status,
+        )
         self._emit_event("user.created", user.model_dump())
         return user
 
     def get_user(self, user_id: int) -> UserRead:
         self._ensure_ready()
         with self._db_conn.cursor() as cur:
-            cur.execute("SELECT id, name, email FROM user_profiles WHERE id = %s", (user_id,))
+            cur.execute("SELECT id, full_name, email, role, status FROM users WHERE id = %s", (user_id,))
             row = cur.fetchone()
         if not row:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="user not found")
-        return UserRead(id=row[0], name=row[1], email=row[2])
+        return UserRead(id=row[0], full_name=row[1], email=row[2], role=row[3], status=row[4])
 
     def update_user(self, user_id: int, payload: UserUpdate) -> UserRead:
         self._ensure_ready()
@@ -116,13 +139,13 @@ class UserService:
         values.append(user_id)
         with self._db_conn.cursor() as cur:
             cur.execute(
-                f"UPDATE user_profiles SET {columns} WHERE id = %s RETURNING id, name, email",
+                f"UPDATE users SET {columns} WHERE id = %s RETURNING id, full_name, email, role, status",
                 values,
             )
             row = cur.fetchone()
         if not row:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="user not found")
-        user = UserRead(id=row[0], name=row[1], email=row[2])
+        user = UserRead(id=row[0], full_name=row[1], email=row[2], role=row[3], status=row[4])
         self._emit_event("user.updated", user.model_dump())
         return user
 
@@ -130,7 +153,7 @@ class UserService:
         self._ensure_ready()
         self._publish_command("user.delete_user", {"user_id": user_id})
         with self._db_conn.cursor() as cur:
-            cur.execute("DELETE FROM user_profiles WHERE id = %s", (user_id,))
+            cur.execute("DELETE FROM users WHERE id = %s", (user_id,))
             deleted = cur.rowcount == 1
         if deleted:
             self._emit_event("user.deleted", {"id": user_id})
@@ -144,19 +167,15 @@ class UserService:
         try:
             self._db_conn = psycopg.connect(self.database_url, autocommit=True)
             with self._db_conn.cursor() as cur:
-                cur.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS user_profiles (
-                        id SERIAL PRIMARY KEY,
-                        name TEXT NOT NULL,
-                        email TEXT UNIQUE NOT NULL,
-                        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-                    )
-                    """
-                )
+                cur.execute("SELECT 1")
         except Exception as exc:
             logger.exception("Database init failed: %s", exc)
             raise
+
+    def _hash_password(self, password: str) -> str:
+        import hashlib
+
+        return hashlib.sha256(f"{self.password_salt}{password}".encode("utf-8")).hexdigest()
 
     def _init_kafka(self) -> None:
         try:
