@@ -1,6 +1,6 @@
 import "./style.css";
 
-const API_GATEWAY = "http://localhost:8080";
+const API_GATEWAY = window.API_BASE_URL || "http://localhost:8080";
 const app = document.getElementById("app");
 
 app.innerHTML = `
@@ -11,7 +11,7 @@ app.innerHTML = `
         <p>Los docentes publican horarios y los estudiantes reservan sesiones.</p>
       </div>
       <div class="actions">
-        <a class="btn btn-outline" href="http://localhost:3001">Volver al portal</a>
+        <a class="btn btn-outline" href="/portal.html">Volver al portal</a>
         <div class="pill" id="role-pill">Rol: invitado</div>
       </div>
     </header>
@@ -98,6 +98,34 @@ const request = async (method, path, body) => {
 let selectedSessionId = null;
 let sessionsCache = [];
 
+const getAvailableSessions = () => sessionsCache.filter((s) => s.student.toUpperCase() === "DISPONIBLE");
+const updateStudentSelectors = () => {
+  const teacherFilter = document.getElementById("teacher-filter");
+  const sessionSelect = document.getElementById("session-select");
+  if (!teacherFilter || !sessionSelect) return;
+
+  const availableSessions = getAvailableSessions();
+  const teachers = Array.from(new Set(availableSessions.map((s) => s.teacher))).sort();
+  teacherFilter.innerHTML = `<option value="">Todos</option>${teachers
+    .map((teacher) => `<option value="${teacher}">${teacher}</option>`)
+    .join("")}`;
+
+  const filtered = teacherFilter.value
+    ? availableSessions.filter((s) => s.teacher === teacherFilter.value)
+    : availableSessions;
+  const options = filtered
+    .filter((s) => s.student.toUpperCase() === "DISPONIBLE")
+    .map((s) => `<option value="${s.id}">#${s.id} - ${s.teacher} - ${s.date}</option>`)
+    .join("");
+  sessionSelect.innerHTML = options
+    ? `<option value="">Selecciona una sesion</option>${options}`
+    : "<option value=\"\">No hay sesiones disponibles</option>";
+
+  selectedSessionId = null;
+  const reserveButton = document.getElementById("btn-reserve");
+  if (reserveButton) reserveButton.disabled = true;
+};
+
 const renderRolePanel = () => {
   if (role === "professor") {
     rolePanel.innerHTML = `
@@ -149,35 +177,10 @@ const renderRolePanel = () => {
   `;
   const teacherFilter = document.getElementById("teacher-filter");
   const sessionSelect = document.getElementById("session-select");
-
-  const fillTeacherOptions = (sessions) => {
-    const teachers = Array.from(new Set(sessions.map((s) => s.teacher))).sort();
-    teacherFilter.innerHTML = `<option value="">Todos</option>${teachers
-      .map((teacher) => `<option value="${teacher}">${teacher}</option>`)
-      .join("")}`;
-  };
-
-  const fillSessionOptions = (sessions) => {
-    const options = sessions
-      .filter((s) => s.student.toUpperCase() === "DISPONIBLE")
-      .map(
-        (s) =>
-          `<option value="${s.id}">#${s.id} - ${s.teacher} - ${s.date}</option>`
-      )
-      .join("");
-    sessionSelect.innerHTML = `<option value="">Selecciona una sesion</option>${options}`;
-  };
-
-  fillTeacherOptions(sessionsCache);
-  fillSessionOptions(sessionsCache);
+  updateStudentSelectors();
 
   teacherFilter.addEventListener("change", () => {
-    const filtered = teacherFilter.value
-      ? sessionsCache.filter((s) => s.teacher === teacherFilter.value)
-      : sessionsCache;
-    fillSessionOptions(filtered);
-    selectedSessionId = null;
-    document.getElementById("btn-reserve").disabled = true;
+    updateStudentSelectors();
   });
 
   sessionSelect.addEventListener("change", () => {
@@ -204,7 +207,7 @@ const renderRolePanel = () => {
 
 const renderList = (items) => {
   if (!items.length) {
-    sessionList.innerHTML = "<div class='list-item'>No hay sesiones registradas.</div>";
+    sessionList.innerHTML = "<div class='list-item'>No hay sesiones disponibles.</div>";
     return;
   }
   sessionList.innerHTML = items
@@ -303,7 +306,12 @@ const renderList = (items) => {
 const refreshList = async () => {
   const data = await request("GET", "/tutoring/api/tutorings");
   sessionsCache = data.data || [];
-  renderList(data.data || []);
+  if (role === "student") {
+    renderList(getAvailableSessions());
+    updateStudentSelectors();
+  } else {
+    renderList(data.data || []);
+  }
 };
 
 const refreshTickets = async () => {
