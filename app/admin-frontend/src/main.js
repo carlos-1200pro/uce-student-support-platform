@@ -1,6 +1,6 @@
 import "./style.css";
 
-const API_GATEWAY = "http://localhost:8080";
+const API_GATEWAY = window.API_BASE_URL || "http://localhost:8080";
 const app = document.getElementById("app");
 
 app.innerHTML = `
@@ -11,7 +11,7 @@ app.innerHTML = `
         <p>Monitorea servicios y registra auditorias del sistema.</p>
       </div>
       <div class="actions">
-        <a class="btn btn-outline" href="http://localhost:3001">Volver al portal</a>
+        <a class="btn btn-outline" href="/portal.html">Volver al portal</a>
         <div class="pill" id="role-pill">Rol: invitado</div>
       </div>
     </header>
@@ -75,6 +75,7 @@ if (params.get("token")) {
 
 const token = localStorage.getItem("auth_token");
 const role = localStorage.getItem("auth_role") || "invitado";
+const email = localStorage.getItem("auth_email") || "";
 rolePill.textContent = `Rol: ${role}`;
 
 const setStatus = (message, isError = false) => {
@@ -126,11 +127,12 @@ const renderAuditList = (items) => {
 };
 
 const renderHealth = (health) => {
+  const upstreams = Array.isArray(health.upstreams) ? health.upstreams : [];
   healthList.innerHTML = `
     <div class="list-item">
-      <strong>Estado: ${health.status}</strong>
-      <span>Servicio: ${health.service}</span>
-      <span>Upstreams: ${health.upstreams.join(", ")}</span>
+      <strong>Estado: ${health.status || "desconocido"}</strong>
+      <span>Servicio: ${health.service || "api-gateway"}</span>
+      <span>Upstreams: ${upstreams.length ? upstreams.join(", ") : "no reportados"}</span>
     </div>
   `;
 };
@@ -170,8 +172,17 @@ document.getElementById("audit-form").addEventListener("submit", async (event) =
   }
 });
 
+if (email) {
+  const actorInput = document.querySelector("input[name='actor']");
+  if (actorInput && !actorInput.value) {
+    actorInput.value = email;
+  }
+}
+
 if (!token) {
   setStatus("Inicia sesion en Auth para acceder al panel.", true);
+} else if (role !== "admin") {
+  setStatus("Acceso restringido. Solo admins pueden acceder a este modulo.", true);
 } else {
   document.getElementById("btn-refresh").click();
 }
