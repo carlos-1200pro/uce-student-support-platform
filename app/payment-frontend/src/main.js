@@ -1,6 +1,6 @@
 import "./style.css";
 
-const API_GATEWAY = "http://localhost:8080";
+const API_GATEWAY = window.API_BASE_URL || "http://localhost:8080";
 const app = document.getElementById("app");
 
 app.innerHTML = `
@@ -11,7 +11,7 @@ app.innerHTML = `
         <p>Genera ordenes de cobro y simula pagos con PayPal.</p>
       </div>
       <div class="actions">
-        <a class="btn btn-outline" href="http://localhost:3001">Volver al portal</a>
+        <a class="btn btn-outline" href="/portal.html">Volver al portal</a>
         <div class="pill" id="role-pill">Rol: invitado</div>
       </div>
     </header>
@@ -49,6 +49,7 @@ const summaryPanel = document.getElementById("summary-panel");
 const paymentPanel = document.getElementById("payment-panel");
 const historySection = document.getElementById("history-section");
 let currentOrder = null;
+let isPaying = false;
 const requiredCourses = [
   "Programacion distribuida",
   "Arquitectura de software",
@@ -86,20 +87,20 @@ const request = async (method, path, body) => {
   });
   const data = await res.json();
   if (!res.ok || !data.success) {
-    throw new Error(data.message || "Error en la solicitud");
+    const error = new Error(data.message || "Error en la solicitud");
+    error.status = res.status;
+    throw error;
   }
   return data;
 };
 
 const canDeletePayment = (item) => {
-  if (role === "professor") return true;
-  if (role === "student") return item.status !== "PAID";
+  if (role === "student" || role === "professor") return item.status !== "PAID";
   return false;
 };
 
 const canEditPayment = (item) => {
-  if (role === "professor") return true;
-  if (role === "student") return item.status !== "PAID";
+  if (role === "student" || role === "professor") return item.status !== "PAID";
   return false;
 };
 
@@ -132,7 +133,7 @@ const renderList = (items) => {
             const amount = Number(document.getElementById("edit-amount").value);
             const status = document.getElementById("edit-status").value;
             try {
-              await request("PUT", `/payment/api/payments/${item.id}`, { amount, status });
+              await request("PUT", `/payments/api/payments/${item.id}`, { amount, status });
               setStatus("Pago actualizado.");
               document.getElementById("btn-refresh").click();
             } catch (error) {
@@ -144,7 +145,7 @@ const renderList = (items) => {
         if (deleteButton) {
           deleteButton.addEventListener("click", async () => {
             try {
-              await request("DELETE", `/payment/api/payments/${item.id}`);
+              await request("DELETE", `/payments/api/payments/${item.id}`);
               setStatus("Pago eliminado.");
               document.getElementById("btn-refresh").click();
             } catch (error) {
@@ -160,7 +161,7 @@ const renderList = (items) => {
       event.stopPropagation();
       const paymentId = Number(button.dataset.id);
       try {
-        await request("DELETE", `/payment/api/payments/${paymentId}`);
+        await request("DELETE", `/payments/api/payments/${paymentId}`);
         setStatus("Pago eliminado.");
         document.getElementById("btn-refresh").click();
       } catch (error) {
@@ -179,14 +180,7 @@ const renderPaymentDetail = (item) => {
       <span>Estado: ${item.status}</span>
     `;
   }
-  const statusOptions =
-    role === "professor"
-      ? `
-        <option value="PENDING" ${item.status === "PENDING" ? "selected" : ""}>PENDING</option>
-        <option value="PAID" ${item.status === "PAID" ? "selected" : ""}>PAID</option>
-        <option value="CANCELLED" ${item.status === "CANCELLED" ? "selected" : ""}>CANCELLED</option>
-      `
-      : `
+  const statusOptions = `
         <option value="PENDING" ${item.status === "PENDING" ? "selected" : ""}>PENDING</option>
         <option value="CANCELLED" ${item.status === "CANCELLED" ? "selected" : ""}>CANCELLED</option>
       `;
@@ -246,89 +240,13 @@ const normalizeFees = (fees) => {
 };
 
 const loadFees = async () => {
-  const data = await request("GET", "/payment/api/fees");
+  const data = await request("GET", "/payments/api/fees");
   return data.data || [];
 };
 
 const renderPanels = async () => {
   const fees = await loadFees();
-  if (role === "professor") {
-    const feeRows = fees
-      .map(
-        (fee) => `
-        <div class="fee-admin" data-id="${fee.id}">
-          <input name="course" value="${fee.course}" />
-          <input name="amount" type="number" step="0.01" value="${fee.amount}" />
-          <button class="btn btn-outline btn-save" type="button">Actualizar</button>
-          <button class="btn btn-danger btn-delete" type="button">Eliminar</button>
-        </div>
-      `
-      )
-      .join("");
-    summaryPanel.innerHTML = `
-      <h2>Configurar valores</h2>
-      <form id="fee-form">
-        <label>Materia
-          <input name="course" placeholder="Programacion distribuida" required />
-        </label>
-        <label>Valor
-          <input name="amount" type="number" step="0.01" placeholder="120.00" required />
-        </label>
-        <div class="actions">
-          <button class="btn btn-primary" type="submit">Guardar</button>
-        </div>
-      </form>
-      <div class="list">
-        ${feeRows || "<div class='list-item'>No hay materias configuradas.</div>"}
-      </div>
-    `;
-    document.getElementById("fee-form").addEventListener("submit", async (event) => {
-      event.preventDefault();
-      const payload = Object.fromEntries(new FormData(event.target).entries());
-      payload.amount = Number(payload.amount);
-      try {
-        await request("POST", "/payment/api/fees", payload);
-        setStatus("Materia registrada.");
-        await renderPanels();
-      } catch (error) {
-        setStatus(error.message, true);
-      }
-    });
-    document.querySelectorAll(".fee-admin").forEach((row) => {
-      const feeId = Number(row.dataset.id);
-      const courseInput = row.querySelector("input[name='course']");
-      const amountInput = row.querySelector("input[name='amount']");
-      row.querySelector(".btn-save").addEventListener("click", async () => {
-        try {
-          const payload = {
-            course: courseInput.value.trim(),
-            amount: Number(amountInput.value),
-          };
-          await request("PUT", `/payment/api/fees/${feeId}`, payload);
-          setStatus("Materia actualizada.");
-          await renderPanels();
-        } catch (error) {
-          setStatus(error.message, true);
-        }
-      });
-      row.querySelector(".btn-delete").addEventListener("click", async () => {
-        try {
-          await request("DELETE", `/payment/api/fees/${feeId}`);
-          setStatus("Materia eliminada.");
-          await renderPanels();
-        } catch (error) {
-          setStatus(error.message, true);
-        }
-      });
-    });
-    paymentPanel.innerHTML = `
-      <h2>Pago en linea</h2>
-      <div class="empty-state">
-        Genera una orden como estudiante para habilitar el pago.
-      </div>
-    `;
-    historySection.style.display = "grid";
-  } else {
+  if (role === "student" || role === "professor") {
     const displayFees = normalizeFees(fees);
     const missing = requiredCourses.filter(
       (course) => !displayFees.some((fee) => fee.course.trim().toLowerCase() === course.toLowerCase())
@@ -402,7 +320,7 @@ const renderPanels = async () => {
         return;
       }
       try {
-        const order = await request("POST", "/payment/api/orders", { courses: selected });
+        const order = await request("POST", "/payments/api/orders", { courses: selected });
         setStatus("Orden generada.");
         currentOrder = order.data;
         renderPaymentForm(order.data);
@@ -423,6 +341,15 @@ const renderPanels = async () => {
       </div>
     `;
     historySection.style.display = "grid";
+  } else {
+    summaryPanel.innerHTML = `
+      <h2>Pagos</h2>
+      <div class="empty-state">
+        Inicia sesion como estudiante o profesor para gestionar pagos.
+      </div>
+    `;
+    paymentPanel.innerHTML = "";
+    historySection.style.display = "none";
   }
 };
 
@@ -439,7 +366,7 @@ const renderPaymentForm = (order) => {
       <button class="method-btn active" type="button">Tarjeta</button>
       <button class="method-btn" type="button" disabled>PayPal</button>
     </div>
-    <div class="order-chip">Orden #${order.payment_id} · Total $${order.total}</div>
+    <div class="order-chip">Orden #${order.payment_id} - Total $${order.total}</div>
     <form id="pay-form" class="payment-form">
       <label>Correo electronico
         <input name="email" type="email" placeholder="correo@uce.edu.ec" required />
@@ -470,7 +397,7 @@ const renderPaymentForm = (order) => {
         <input name="postal" placeholder="170000" required />
       </label>
       <div class="actions">
-        <button class="btn btn-primary" type="submit">Pagar $${order.total}</button>
+        <button class="btn btn-primary" id="btn-pay" type="submit">Pagar $${order.total}</button>
       </div>
     </form>
     <div id="receipt"></div>
@@ -483,6 +410,10 @@ const renderPaymentForm = (order) => {
   `;
   document.getElementById("pay-form").addEventListener("submit", async (event) => {
     event.preventDefault();
+    if (isPaying) return;
+    isPaying = true;
+    const payButton = document.getElementById("btn-pay");
+    if (payButton) payButton.disabled = true;
     const formData = Object.fromEntries(new FormData(event.target).entries());
     const digits = String(formData.card_number || "").replace(/\D/g, "");
     if (digits.length < 4) {
@@ -496,7 +427,7 @@ const renderPaymentForm = (order) => {
       card_last4: digits.slice(-4),
     };
     try {
-      const receipt = await request("POST", `/payment/api/payments/${order.payment_id}/pay`, payload);
+      const receipt = await request("POST", `/payments/api/payments/${order.payment_id}/pay`, payload);
       document.getElementById("receipt").innerHTML = `
         <div class="list-item">
           <strong>Comprobante</strong>
@@ -516,15 +447,25 @@ const renderPaymentForm = (order) => {
         <span>Fecha: ${receipt.data.paid_at}</span>
       `;
       setStatus("Pago procesado.");
+      currentOrder = null;
+      if (payButton) payButton.disabled = true;
     } catch (error) {
-      setStatus(error.message, true);
+      if (error.status === 409) {
+        setStatus("Este pago ya fue procesado.", true);
+        document.getElementById("btn-refresh").click();
+      } else {
+        setStatus(error.message, true);
+      }
+      if (payButton) payButton.disabled = false;
+    } finally {
+      isPaying = false;
     }
   });
 };
 
 document.getElementById("btn-refresh").addEventListener("click", async () => {
   try {
-    const data = await request("GET", "/payment/api/payments");
+    const data = await request("GET", "/payments/api/payments");
     renderList(data.data || []);
     setStatus("Pagos actualizados.");
   } catch (error) {
