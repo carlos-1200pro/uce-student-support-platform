@@ -79,9 +79,11 @@ class AcademicRecordService:
                     "SELECT id, student_email, course, grade FROM academic_records WHERE student_email = %s ORDER BY id ASC",
                     (student_email,),
                 )
+                rows = cur.fetchall()
+                if not rows:
+                    rows = self._seed_default_records(cur, student_email)
             else:
                 cur.execute("SELECT id, student_email, course, grade FROM academic_records ORDER BY id ASC")
-            rows = cur.fetchall()
         return [RecordRead(id=row[0], student_email=row[1], course=row[2], grade=row[3]) for row in rows]
 
     def create_record(self, payload: RecordCreate) -> RecordRead:
@@ -177,6 +179,26 @@ class AcademicRecordService:
         except Exception as exc:
             logger.exception("Database init failed: %s", exc)
             raise
+
+    def _seed_default_records(self, cur: psycopg.Cursor, student_email: str) -> list[tuple]:
+        defaults = [
+            ("Programacion Basica", 18.5),
+            ("Matematicas Discretas", 17.0),
+            ("Arquitectura de Computadores", 16.5),
+        ]
+        for course, grade in defaults:
+            cur.execute(
+                """
+                INSERT INTO academic_records (student_email, course, grade)
+                VALUES (%s, %s, %s)
+                """,
+                (student_email, course, grade),
+            )
+        cur.execute(
+            "SELECT id, student_email, course, grade FROM academic_records WHERE student_email = %s ORDER BY id ASC",
+            (student_email,),
+        )
+        return cur.fetchall()
 
     def _init_kafka(self) -> None:
         try:
