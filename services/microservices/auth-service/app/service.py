@@ -30,6 +30,7 @@ class LoginData(BaseModel):
     email: EmailStr
     full_name: str
     role: str
+    status: str
     token: str
 
 
@@ -81,6 +82,7 @@ class AuthService:
 
     def startup(self) -> None:
         self._init_db()
+        self._seed_admin_user()
         self._init_redis()
         self._init_kafka()
         self._init_rabbit()
@@ -133,13 +135,15 @@ class AuthService:
         self._publish_command("auth.login", payload.model_dump())
         with self._db_conn.cursor() as cur:
             cur.execute(
-                "SELECT id, password_hash, full_name, role FROM users WHERE email = %s",
+                "SELECT id, password_hash, full_name, role, status FROM users WHERE email = %s",
                 (payload.email,),
             )
             row = cur.fetchone()
         if not row:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid credentials")
-        user_id, password_hash, full_name, role = row
+        user_id, password_hash, full_name, role, status_value = row
+        if status_value != "active":
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="user blocked")
         if password_hash != self._hash_password(payload.password):
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid credentials")
         token = self._generate_token(user_id=user_id, email=payload.email, role=role)
@@ -150,6 +154,7 @@ class AuthService:
             email=payload.email,
             full_name=full_name,
             role=role,
+            status=status_value,
             token=token,
         )
 
@@ -179,14 +184,32 @@ class AuthService:
                         full_name TEXT NOT NULL,
                         password_hash TEXT NOT NULL,
                         role TEXT NOT NULL DEFAULT 'student',
+                        status TEXT NOT NULL DEFAULT 'active',
                         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
                     )
                     """
                 )
                 cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'student'")
+                cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active'")
         except Exception as exc:
             logger.exception("Database init failed: %s", exc)
             raise
+
+    def _seed_admin_user(self) -> None:
+        if not self._db_conn:
+            return
+        with self._db_conn.cursor() as cur:
+            cur.execute("SELECT id FROM users WHERE email = %s", ("admin@uce.edu.ec",))
+            if cur.fetchone():
+                return
+            password_hash = self._hash_password("admin")
+            cur.execute(
+                """
+                INSERT INTO users (email, full_name, password_hash, role, status)
+                VALUES (%s, %s, %s, %s, %s)
+                """,
+                ("admin@uce.edu.ec", "Administrador UCE", password_hash, "admin", "active"),
+            )
 
     def _init_redis(self) -> None:
         self._redis = redis.from_url(self.redis_url, decode_responses=True)
