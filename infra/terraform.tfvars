@@ -21,7 +21,7 @@ instance_type_gateway  = "t3.micro"
 instance_type_bastion  = "t3.micro"
 instance_type_services = "t3.small"
 instance_type_data     = "t3.small"
-instance_type_kafka    = "t3.small"
+instance_type_kafka    = "t3.medium"
 instance_type_frontend = "t3.micro"
 
 postgres_db       = "student_platform"
